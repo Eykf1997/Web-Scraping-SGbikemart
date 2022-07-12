@@ -120,15 +120,26 @@ for x in range(int(currentPageLink),int(lastPageLink)):
         coeExpiryDate[2].strip()
         formattedCoeExpiryDate = coeExpiryDate[0] +"-"+months_in_year[int(coeExpiryDate[1])]+"-"+coeExpiryDate[2][-3:-1]
 
-        
+
+
 
         if model in listOfExistingModels:
 
             listOfPossibleListingsIndex = get_index_positions(listOfExistingModels,model)
             correctPosition= None
+            
             for i in listOfPossibleListingsIndex:
-                if(df.loc[i]['COE Expiry Date'] == formattedCoeExpiryDate and df.loc[i]['Model'] == model):
-                    correctPosition=i
+            #09-Jan-29(formattedCoeExpiryDate)
+            #6-Jan-29(df.loc[i]['COE Expiry Date']) 
+                if(len(df.loc[i]['COE Expiry Date'])<9):
+                    if("0"+df.loc[i]['COE Expiry Date'] == formattedCoeExpiryDate and df.loc[i]['Model'] == model):
+                        correctPosition=i
+                        break
+
+                else:    
+                    if(df.loc[i]['COE Expiry Date'] == formattedCoeExpiryDate and df.loc[i]['Model'] == model):
+                        correctPosition=i
+                        break
 
             if correctPosition != None:
                 print('Inserting new price for an existing model')
