@@ -42,12 +42,22 @@ def get_index_positions(list_of_elems, element):
         except ValueError as e:
             break
     return index_pos_list
-
+    
+def write_excel(filename,sheetname,dataframe):
+    with pd.ExcelWriter(filename, engine='openpyxl', mode='a') as writer: 
+        workBook = writer.book
+        try:
+            workBook.remove(workBook[sheetname])
+        except:
+            print("Worksheet does not exist")
+        finally:
+            dataframe.to_excel(writer, sheet_name=sheetname,index=False)
+            writer.save()
 
 now = datetime.now()
 formattedDate = now.strftime("%d-%b-%Y")
-if os.path.exists("sgbikemartFinal.csv"):
-    df = pd.read_csv("sgbikemartFinal.csv",index_col=0)
+if os.path.exists("sgbikemartFinal.xlsx"):
+    df = pd.read_excel("sgbikemartFinal.xlsx")
     df['Price ('+formattedDate+')']=""
 
 else:
@@ -56,7 +66,6 @@ else:
 
 # coeExpiryDate = df['COE Expiry Date'].values.tolist()
 # df['COE Expiry Date'] = df['COE Expiry Date'].apply(lambda x: x.split("(")[0])
-
 
 
 
@@ -103,49 +112,73 @@ for x in range(int(currentPageLink),int(lastPageLink)):
         listingDetails = listingDetails.replace("\n","")
         price = motorcycleDetails.find('h2',class_='text-center strong').text
         price = price.replace("\n","")
+        if price=="Carry On Installment":
+            break
+        else:
+            price = price.split("$")[1]
 
-        values = rowValue[0].find_all('td',class_="value")
-        listOfValues=[]
-        for value in rowValue:
-            if value.text !="":
+
+            values = rowValue[0].find_all('td',class_="value")
+            listOfValues=[]
+            for value in rowValue:
+                if value.text !="":
+                    
+                    listOfValues.append(value.text.replace("\n",""))
+
+            model = listOfValues[2]  
+            coeExpiryDate = listOfValues[6]
+            coeExpiryDate = coeExpiryDate.strip()
+            coeExpiryDate = coeExpiryDate.split("(")[0]
+            #['30', '11', '2031 ']
+            coeExpiryDate = coeExpiryDate.split("/")
+            coeExpiryDate[2].strip()
+            formattedCoeExpiryDate = coeExpiryDate[0] +"-"+months_in_year[int(coeExpiryDate[1])]+"-"+coeExpiryDate[2][-3:-1]
+
+
+
+
+            if model in listOfExistingModels:
+
+                listOfPossibleListingsIndex = get_index_positions(listOfExistingModels,model)
+                correctPosition= None
                 
-                listOfValues.append(value.text.replace("\n",""))
+                for i in listOfPossibleListingsIndex:
+                #09-Jan-29(formattedCoeExpiryDate)
+                #6-Jan-29(df.loc[i]['COE Expiry Date']) 
+                    dateTime = df.loc[i]['COE Expiry Date'].strftime("%d-%b-%Y")
+                    dateTime = dateTime.split('-')
+                    dateTimeFormatted = dateTime[0]+"-"+dateTime[1]+"-"+dateTime[2][2:]
 
-        model = listOfValues[2]  
-        coeExpiryDate = listOfValues[6]
-        coeExpiryDate = coeExpiryDate.strip()
-        coeExpiryDate = coeExpiryDate.split("(")[0]
-        #['30', '11', '2031 ']
-        coeExpiryDate = coeExpiryDate.split("/")
-        coeExpiryDate[2].strip()
-        formattedCoeExpiryDate = coeExpiryDate[0] +"-"+months_in_year[int(coeExpiryDate[1])]+"-"+coeExpiryDate[2][-3:-1]
+                    if(len(dateTimeFormatted)<9):
+                        
+                        if("0"+dateTimeFormatted == formattedCoeExpiryDate and df.loc[i]['Model'] == model):
+                            correctPosition=i
+                            break
 
+                    else:    
+                        if(dateTimeFormatted == formattedCoeExpiryDate and df.loc[i]['Model'] == model):
+                            correctPosition=i
+                            break
 
+                if correctPosition != None:
+                    print('Inserting new price for an existing model')
+                    df.loc[correctPosition, 'Price ('+formattedDate+')'] = int(price)
+                    df.loc[correctPosition, 'Price'] = int(price)
 
+                else:
+                    print("model does exist within list, but it's a new listing")
+                    listingType = listOfValues[0]
+                    brand = listOfValues[1]
+                    engineCapacity = listOfValues[3]
+                    classification = listOfValues[4]
+                    registrationDate = listOfValues[5]
+                    mileage = listOfValues[7]
+                    noOfOwners = listOfValues[8]
+                    typeOfVehicle = listOfValues[9]
+                    df = df.append({'Brand':brand,'Model':model,'Price':int(price),'Engine Capacity':engineCapacity,'Classification':classification,'Registration Date':registrationDate,'COE Expiry Date':formattedCoeExpiryDate,'Mileage':mileage,'No. of owners':noOfOwners,'Type of Vehicle':typeOfVehicle,'Listing Details':listingDetails,'Price ('+formattedDate+')':price},ignore_index=True)
 
-        if model in listOfExistingModels:
-
-            listOfPossibleListingsIndex = get_index_positions(listOfExistingModels,model)
-            correctPosition= None
-            
-            for i in listOfPossibleListingsIndex:
-            #09-Jan-29(formattedCoeExpiryDate)
-            #6-Jan-29(df.loc[i]['COE Expiry Date']) 
-                if(len(df.loc[i]['COE Expiry Date'])<9):
-                    if("0"+df.loc[i]['COE Expiry Date'] == formattedCoeExpiryDate and df.loc[i]['Model'] == model):
-                        correctPosition=i
-                        break
-
-                else:    
-                    if(df.loc[i]['COE Expiry Date'] == formattedCoeExpiryDate and df.loc[i]['Model'] == model):
-                        correctPosition=i
-                        break
-
-            if correctPosition != None:
-                print('Inserting new price for an existing model')
-                df.loc[correctPosition, 'Price ('+formattedDate+')'] = price
             else:
-                print("model does exist within list, but it's a new listing")
+                print('new model, inserting new row')
                 listingType = listOfValues[0]
                 brand = listOfValues[1]
                 engineCapacity = listOfValues[3]
@@ -155,20 +188,11 @@ for x in range(int(currentPageLink),int(lastPageLink)):
                 noOfOwners = listOfValues[8]
                 typeOfVehicle = listOfValues[9]
                 df = df.append({'Brand':brand,'Model':model,'Price':price,'Engine Capacity':engineCapacity,'Classification':classification,'Registration Date':registrationDate,'COE Expiry Date':formattedCoeExpiryDate,'Mileage':mileage,'No. of owners':noOfOwners,'Type of Vehicle':typeOfVehicle,'Listing Details':listingDetails,'Price ('+formattedDate+')':price},ignore_index=True)
+# df['Price'] = df['Price'].apply(lambda x: x.split("$")[1])
 
-        else:
-            print('new model, inserting new row')
-            listingType = listOfValues[0]
-            brand = listOfValues[1]
-            engineCapacity = listOfValues[3]
-            classification = listOfValues[4]
-            registrationDate = listOfValues[5]
-            mileage = listOfValues[7]
-            noOfOwners = listOfValues[8]
-            typeOfVehicle = listOfValues[9]
-            df = df.append({'Brand':brand,'Model':model,'Price':price,'Engine Capacity':engineCapacity,'Classification':classification,'Registration Date':registrationDate,'COE Expiry Date':formattedCoeExpiryDate,'Mileage':mileage,'No. of owners':noOfOwners,'Type of Vehicle':typeOfVehicle,'Listing Details':listingDetails,'Price ('+formattedDate+')':price},ignore_index=True)
-
-df.to_csv('sgbikemartFinal.csv')
+# print(df)
+with pd.ExcelWriter("sgbikemartFinal.xlsx", engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
+    df.to_excel(writer, sheet_name='sgbikemartFinal', index=False)
 
 
 # for row in tables.tbody.find_all('tr'):    
